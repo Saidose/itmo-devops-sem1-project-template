@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/url"
 	"project_sem/internal/domain"
 
@@ -19,7 +20,12 @@ func NewPricesDb(ctx context.Context, user, pass, name, host string) *PricesDB {
 	if err != nil {
 		panic(err)
 	}
-	return &PricesDB{pool: pool}
+	db := &PricesDB{pool: pool}
+	err = db.Migrate(ctx)
+	if err != nil {
+		log.Fatalf("failed to migrate: %v", err)
+	}
+	return db
 }
 
 func (r *PricesDB) Migrate(ctx context.Context) error {
@@ -28,8 +34,7 @@ func (r *PricesDB) Migrate(ctx context.Context) error {
     name TEXT NOT NULL,
     category TEXT NOT NULL,
     price NUMERIC(12, 2) NOT NULL,
-    create_date DATE NOT NULL,
-)`
+    create_date DATE NOT NULL)`
 	_, err := r.pool.Exec(ctx, query)
 	if err != nil {
 		return err

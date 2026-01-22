@@ -74,23 +74,26 @@ func (h *Handlers) PostPrices(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) GetPrices(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	prices, err := h.db.GetAll(ctx)
-	pricesCSV := domain.PriceConvertDate(prices)
 	if err != nil {
 		log.Println(err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", "attachment; filename=data.zip")
+	w.Header().Set("Content-Disposition", "attachment; filename=response.zip")
 
 	zipWriter := zip.NewWriter(w)
-	file, _ := zipWriter.Create("data.csv")
+	defer zipWriter.Close()
 
-	err = gocsv.Marshal(pricesCSV, file)
+	f, err := zipWriter.Create("data.csv")
 	if err != nil {
-		log.Println(err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	_ = zipWriter.Close()
+
+	if err := gocsv.Marshal(prices, f); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
