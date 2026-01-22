@@ -7,9 +7,9 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"project_sem/internal/application"
 	"project_sem/internal/db"
 	"project_sem/internal/domain"
+	"project_sem/internal/stats"
 
 	"github.com/gocarina/gocsv"
 )
@@ -64,9 +64,9 @@ func (h *Handlers) PostPrices(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	stats := application.GetStats(prices)
+	stats := stats.GetStats(prices)
 
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "stats/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(stats)
 }
@@ -80,7 +80,7 @@ func (h *Handlers) GetPrices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Type", "stats/zip")
 	w.Header().Set("Content-Disposition", "attachment; filename=response.zip")
 
 	zipWriter := zip.NewWriter(w)

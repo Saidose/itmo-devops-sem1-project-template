@@ -46,7 +46,7 @@ jobs:
     - name: Prepare environment
       run: ./scripts/prepare.sh
 
-    - name: Run application
+    - name: Run stats
       run: ./scripts/run.sh
       env:
         POSTGRES_HOST: localhost

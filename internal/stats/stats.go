@@ -1,4 +1,4 @@
-package application
+package stats
 
 import "project_sem/internal/domain"
 
