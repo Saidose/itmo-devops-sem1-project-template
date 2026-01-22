@@ -1,40 +1,25 @@
 #!/usr/bin/env bash
 set -e
 
-echo "Preparing environment..."
+echo "🔧 Preparing environment..."
 
-if ! command -v psql >/dev/null 2>&1; then
-  echo "PostgreSQL not installed"
-  exit 1
-fi
-
-echo "PostgreSQL detected"
-
+DB_HOST="localhost"
+DB_PORT="5432"
 DB_USER="validator"
 DB_PASS="val1dat0r"
 DB_NAME="project-sem-1"
-DB_PORT="5432"
 
+export PGPASSWORD="$DB_PASS"
 
-sudo -u postgres psql <<EOF
-DO \$\$
-BEGIN
-   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${DB_USER}') THEN
-      CREATE ROLE ${DB_USER} LOGIN PASSWORD '${DB_PASS}';
-   END IF;
-END
-\$\$;
-EOF
-
-sudo -u postgres psql <<EOF
-DO \$\$
-BEGIN
-   IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}') THEN
-      CREATE DATABASE "${DB_NAME}" OWNER ${DB_USER};
-   END IF;
-END
-\$\$;
-EOF
+echo "Waiting for PostgreSQL..."
+for i in {1..30}; do
+  if psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -c "select 1" >/dev/null 2>&1; then
+    echo "✅ PostgreSQL is ready"
+    break
+  fi
+  echo "waiting..."
+  sleep 1
+done
 
 
 echo "Database prepared successfully"
