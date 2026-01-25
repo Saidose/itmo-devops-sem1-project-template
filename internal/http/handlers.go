@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"project_sem/internal/db"
 	"project_sem/internal/domain"
-	"project_sem/internal/stats"
 
 	"github.com/gocarina/gocsv"
 )
@@ -24,6 +23,7 @@ func NewHandlers(db *db.PricesDB) *Handlers {
 
 func (h *Handlers) PostPrices(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Println(err)
@@ -33,7 +33,9 @@ func (h *Handlers) PostPrices(w http.ResponseWriter, r *http.Request) {
 
 	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
 	if err != nil {
-		panic(err)
+		log.Println(err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	var prices []domain.Price
@@ -44,31 +46,26 @@ func (h *Handlers) PostPrices(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				log.Println(err)
 				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
 			}
 			defer rc.Close()
 
-			err = gocsv.Unmarshal(rc, &prices)
-
-			if err != nil {
+			if err := gocsv.Unmarshal(rc, &prices); err != nil {
 				log.Println(err)
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
 		}
 	}
-	for _, price := range prices {
-		err := h.db.Create(ctx, price)
-		if err != nil {
-			log.Println(err)
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-	}
-	stats := stats.GetStats(prices)
 
-	w.Header().Set("Content-Type", "stats/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(stats)
+	priceStats, err := h.db.InsertPrices(ctx, prices)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(priceStats)
 }
 
 func (h *Handlers) GetPrices(w http.ResponseWriter, r *http.Request) {
@@ -88,11 +85,13 @@ func (h *Handlers) GetPrices(w http.ResponseWriter, r *http.Request) {
 
 	f, err := zipWriter.Create("data.csv")
 	if err != nil {
+		log.Println(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if err := gocsv.Marshal(prices, f); err != nil {
+		log.Println(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

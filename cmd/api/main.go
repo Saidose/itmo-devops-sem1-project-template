@@ -16,6 +16,7 @@ func main() {
 		log.Fatal(err)
 	}
 	database := db.NewPricesDb(ctx, cfg.DBUser, cfg.DBPass, cfg.DBName, cfg.DBHost)
+	defer database.Close() // закрываем бд
 	handlers := myhttp.NewHandlers(database)
 
 	mux := http.NewServeMux()

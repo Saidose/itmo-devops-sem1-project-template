@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"project_sem/internal/domain"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -42,27 +43,26 @@ func (r *PricesDB) Migrate(ctx context.Context) error {
 	return nil
 }
 
-func (r *PricesDB) Create(ctx context.Context, price domain.Price) error {
-	const query = `
-	INSERT INTO prices (
-						id,
-						name,
-						category,
-						price,
-						create_date
-						)
-	VALUES ($1, $2, $3, $4, $5)
+func (r *PricesDB) Close() {
+	r.pool.Close()
+}
+
+func (r *PricesDB) Begin(ctx context.Context) (pgx.Tx, error) {
+	return r.pool.Begin(ctx)
+}
+
+func (r *PricesDB) createTx(ctx context.Context, tx pgx.Tx, p domain.Price) error {
+	const q = `
+	INSERT INTO prices (name, category, price, create_date)
+	VALUES ($1, $2, $3, $4)
 	`
-	_, err := r.pool.Exec(ctx, query,
-		price.ID,
-		price.Name,
-		price.Category,
-		price.Price,
-		price.CreateDate)
-	if err != nil {
-		return err
-	}
-	return nil
+	_, err := tx.Exec(ctx, q,
+		p.Name,
+		p.Category,
+		p.Price,
+		p.CreateDate,
+	)
+	return err
 }
 
 func (r *PricesDB) GetAll(ctx context.Context) ([]domain.Price, error) {
@@ -85,6 +85,55 @@ SELECT id, name, category, price, create_date FROM prices`
 		return nil, err
 	}
 	return prices, nil
+}
+
+// InsertPrices - вставляет данные в БД транзакцией. Перед коммитом считает статистику.
+func (r *PricesDB) InsertPrices(ctx context.Context, prices []domain.Price) (Stats, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return Stats{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, p := range prices {
+		if err := r.createTx(ctx, tx, p); err != nil {
+			return Stats{}, err
+		}
+	}
+
+	stats, err := r.getAggregatesTx(ctx, tx, len(prices))
+	if err != nil {
+		return Stats{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return Stats{}, err
+	}
+
+	return stats, nil
+}
+
+func (r *PricesDB) getAggregatesTx(ctx context.Context, tx pgx.Tx, inserted int) (Stats, error) {
+	const q = `
+	SELECT 
+		COUNT(DISTINCT category),
+		COALESCE(SUM(price),0)
+	FROM prices
+	`
+
+	var s Stats
+	s.TotalItems = inserted
+
+	err := tx.QueryRow(ctx, q).
+		Scan(&s.TotalCategories, &s.TotalPrice)
+
+	return s, err
+}
+
+type Stats struct {
+	TotalItems      int     `json:"total_items"`
+	TotalCategories int     `json:"total_categories"`
+	TotalPrice      float64 `json:"total_price"`
 }
 
 func makePostgresURL(dbuser, dbpass, dbname, dbhost string) string {
